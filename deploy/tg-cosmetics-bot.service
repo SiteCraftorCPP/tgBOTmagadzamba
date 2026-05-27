@@ -1,0 +1,17 @@
+[Unit]
+Description=Telegram Cosmetics Shop Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tgBOTmagadzamba
+EnvironmentFile=-/opt/tgBOTmagadzamba/.env
+ExecStart=/opt/tgBOTmagadzamba/.venv/bin/python /opt/tgBOTmagadzamba/bot.py
+Restart=on-failure
+RestartSec=10
+User=tgbot
+Group=tgbot
+
+[Install]
+WantedBy=multi-user.target
