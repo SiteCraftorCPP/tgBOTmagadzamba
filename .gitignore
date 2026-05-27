@@ -5,3 +5,4 @@ __pycache__/
 venv/
 data/*.tmp
 debug-314e12.log
+data/*.json
