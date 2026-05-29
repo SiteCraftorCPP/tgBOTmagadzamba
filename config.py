@@ -13,7 +13,7 @@ from proxy_util import normalize_telegram_proxy
 @dataclass(frozen=True)
 class Config:
     bot_token: str
-    admin_id: int
+    admin_ids: set[int]
     bot_username: str
     proxy_url: str | None
     channel_id: int
@@ -21,7 +21,7 @@ class Config:
 
 def load_config() -> Config:
     bot_token = os.getenv("BOT_TOKEN", "").strip()
-    admin_id = os.getenv("ADMIN_ID", "7600749840").strip()
+    admin_id_raw = os.getenv("ADMIN_ID", "7600749840").strip()
     bot_username = os.getenv("BOT_USERNAME", "tgBOTmagadzamba_bot").strip().lstrip("@")
     channel_id_raw = os.getenv("CHANNEL_ID", "-1003733210844").strip()
     proxy_raw = (
@@ -31,10 +31,14 @@ def load_config() -> Config:
     if not bot_token:
         raise RuntimeError("BOT_TOKEN is not set. Create .env from .env.example.")
 
-    try:
-        parsed_admin_id = int(admin_id)
-    except ValueError as exc:
-        raise RuntimeError("ADMIN_ID must be a number.") from exc
+    admin_ids = set()
+    for part in admin_id_raw.split(","):
+        part = part.strip()
+        if part:
+            try:
+                admin_ids.add(int(part))
+            except ValueError as exc:
+                raise RuntimeError(f"ADMIN_ID must contain numbers separated by commas. Invalid value: {part}") from exc
 
     try:
         parsed_channel_id = int(channel_id_raw)
@@ -45,7 +49,7 @@ def load_config() -> Config:
 
     return Config(
         bot_token=bot_token,
-        admin_id=parsed_admin_id,
+        admin_ids=admin_ids,
         bot_username=bot_username,
         proxy_url=proxy_url,
         channel_id=parsed_channel_id,

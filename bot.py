@@ -43,7 +43,7 @@ class OrderProduct(StatesGroup):
 
 
 def is_admin(user_id: int | None) -> bool:
-    return user_id == config.admin_id
+    return user_id in config.admin_ids
 
 
 def product_link(product_id: str) -> str:
