@@ -22,6 +22,7 @@ router = Router()
 config: Config
 
 _TELEGRAM_TEXT_SOFT_LIMIT = 3800
+_PAD = "ㅤ" * 45  # Невидимый символ для растягивания инлайн-кнопок
 
 
 class AddCategory(StatesGroup):
@@ -103,7 +104,7 @@ async def show_product(message: Message, product: dict[str, Any]) -> None:
         media = [InputMediaPhoto(media=p) for p in photos]
         await message.answer_media_group(media)
         await message.answer(
-            product_caption(product),
+            product_caption(product) + f"\n{_PAD}",
             reply_markup=product_card(product["id"]),
         )
     else:
@@ -443,7 +444,7 @@ async def add_product_price(message: Message, state: FSMContext) -> None:
         media = [InputMediaPhoto(media=p) for p in photos]
         await message.answer_media_group(media)
         await message.answer(
-            product_caption(product, include_link=False),
+            product_caption(product, include_link=False) + f"\n{_PAD}",
             reply_markup=admin_category_menu(cat_id),
         )
     else:
@@ -557,7 +558,7 @@ async def catalog_cat_callback(callback: CallbackQuery, state: FSMContext) -> No
         new_album_ids = [m.message_id for m in msgs]
         await state.update_data(album_msg_ids=new_album_ids)
         await callback.message.answer(
-            product_caption(product),
+            product_caption(product) + f"\n{_PAD}",
             reply_markup=markup
         )
     else:
