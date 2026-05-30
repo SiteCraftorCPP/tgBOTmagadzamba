@@ -441,7 +441,16 @@ async def add_product_back(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(F.data == "catalog")
-async def catalog_callback(callback: CallbackQuery) -> None:
+async def catalog_callback(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    album_msg_ids = data.get("album_msg_ids", [])
+    for msg_id in album_msg_ids:
+        try:
+            await callback.bot.delete_message(chat_id=callback.message.chat.id, message_id=msg_id)
+        except TelegramBadRequest:
+            pass
+    await state.update_data(album_msg_ids=[])
+
     cats = list_categories()
     await callback.answer()
     if not callback.message:
@@ -463,7 +472,15 @@ async def catalog_callback(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data.startswith("catalog:cat:"))
 async def catalog_cat_callback(callback: CallbackQuery, state: FSMContext) -> None:
-    await state.clear()
+    data = await state.get_data()
+    album_msg_ids = data.get("album_msg_ids", [])
+    for msg_id in album_msg_ids:
+        try:
+            await callback.bot.delete_message(chat_id=callback.message.chat.id, message_id=msg_id)
+        except TelegramBadRequest:
+            pass
+    await state.update_data(album_msg_ids=[])
+
     parts = callback.data.split(":")
     cat_id = parts[2]
     page = int(parts[3]) if len(parts) > 3 else 0
@@ -479,43 +496,36 @@ async def catalog_cat_callback(callback: CallbackQuery, state: FSMContext) -> No
     photos = product.get("photos", [])
     if not photos and "photo" in product:
         photos = [product["photo"]]
-    photo = photos[0] if photos else "https://via.placeholder.com/150"
-    
-    markup = product_pagination(cat_id, page, len(products), product["id"], len(photos))
+        
+    markup = product_pagination(cat_id, page, len(products), product["id"])
     
     try:
-        if callback.message and callback.message.photo:
-            await callback.message.edit_media(
-                media=InputMediaPhoto(media=photo, caption=product_caption(product)),
-                reply_markup=markup
-            )
-        elif callback.message:
+        await callback.message.delete()
+    except TelegramBadRequest:
+        pass
+
+    if len(photos) > 1:
+        media = [InputMediaPhoto(media=p) for p in photos]
+        msgs = await callback.message.answer_media_group(media)
+        new_album_ids = [m.message_id for m in msgs]
+        await state.update_data(album_msg_ids=new_album_ids)
+        await callback.message.answer(
+            product_caption(product),
+            reply_markup=markup
+        )
+    else:
+        photo = photos[0] if photos else "https://via.placeholder.com/150"
+        try:
             await callback.message.answer_photo(
                 photo=photo,
                 caption=product_caption(product),
                 reply_markup=markup
             )
-            await callback.message.delete()
-    except TelegramBadRequest:
-        pass
-    await callback.answer()
-
-
-@router.callback_query(F.data.startswith("product:photos:"))
-async def product_photos_callback(callback: CallbackQuery) -> None:
-    product_id = callback.data.split(":")[-1]
-    product = get_product(product_id)
-    if not product:
-        await callback.answer("Товар не найден", show_alert=True)
-        return
-        
-    photos = product.get("photos", [])
-    if not photos and "photo" in product:
-        photos = [product["photo"]]
-        
-    if len(photos) > 1:
-        media = [InputMediaPhoto(media=p) for p in photos]
-        await callback.message.answer_media_group(media)
+        except TelegramBadRequest:
+            await callback.message.answer(
+                product_caption(product),
+                reply_markup=markup
+            )
     await callback.answer()
 
 
