@@ -14,8 +14,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 
 from config import Config, load_config
-from keyboards import admin_categories_keyboard, admin_category_menu, admin_menu, cancel_keyboard, categories_keyboard, main_menu, payment_stub, product_card, product_pagination, done_photos_keyboard
-from storage import add_category, add_product, ensure_storage, get_category, get_product, list_categories, list_products, save_order
+from keyboards import admin_categories_keyboard, admin_category_menu, admin_menu, cancel_keyboard, categories_keyboard, main_menu, payment_stub, product_card, product_pagination, done_photos_keyboard, confirm_delete_category_keyboard
+from storage import add_category, add_product, ensure_storage, get_category, get_product, list_categories, list_products, save_order, delete_category
 
 
 router = Router()
@@ -261,6 +261,53 @@ async def admin_cat_callback(callback: CallbackQuery, state: FSMContext) -> None
     await state.clear()
     text = f"📁 Раздел: <b>{escape(cat['name'])}</b>\nВыберите действие:"
     markup = admin_category_menu(cat_id)
+    try:
+        await callback.message.edit_text(text, reply_markup=markup)
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=markup)
+        try:
+            await callback.message.delete()
+        except TelegramBadRequest:
+            pass
+
+
+@router.callback_query(F.data.startswith("admin:del_cat:"))
+async def admin_del_cat_callback(callback: CallbackQuery) -> None:
+    if not is_admin(callback.from_user.id):
+        return
+    cat_id = callback.data.split(":")[-1]
+    cat = get_category(cat_id)
+    if not cat:
+        await callback.answer("Раздел не найден", show_alert=True)
+        return
+    
+    text = f"⚠️ Вы уверены, что хотите удалить раздел <b>{escape(cat['name'])}</b>?\n\n❗️ <i>Все товары в этом разделе также будут безвозвратно удалены!</i>"
+    markup = confirm_delete_category_keyboard(cat_id)
+    try:
+        await callback.message.edit_text(text, reply_markup=markup)
+    except TelegramBadRequest:
+        await callback.message.answer(text, reply_markup=markup)
+        try:
+            await callback.message.delete()
+        except TelegramBadRequest:
+            pass
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:del_cat_confirm:"))
+async def admin_del_cat_confirm_callback(callback: CallbackQuery) -> None:
+    if not is_admin(callback.from_user.id):
+        return
+    cat_id = callback.data.split(":")[-1]
+    
+    if delete_category(cat_id):
+        await callback.answer("✅ Раздел и его товары удалены!", show_alert=True)
+    else:
+        await callback.answer("❌ Ошибка удаления (возможно, раздел уже удален).", show_alert=True)
+        
+    cats = list_categories()
+    text = "🗂 <b>Управление разделами</b>\nВыберите раздел или добавьте новый:"
+    markup = admin_categories_keyboard(cats, 0)
     try:
         await callback.message.edit_text(text, reply_markup=markup)
     except TelegramBadRequest:

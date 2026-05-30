@@ -41,6 +41,21 @@ def get_category(cat_id: str) -> dict[str, Any] | None:
     return None
 
 
+def delete_category(cat_id: str) -> bool:
+    cats = list_categories()
+    new_cats = [c for c in cats if c["id"] != cat_id]
+    if len(cats) == len(new_cats):
+        return False
+    _write_json(CATEGORIES_FILE, new_cats)
+    
+    prods = list_products()
+    new_prods = [p for p in prods if p.get("category_id") != cat_id]
+    if len(prods) != len(new_prods):
+        _write_json(PRODUCTS_FILE, new_prods)
+        
+    return True
+
+
 def _sanitize_product(record: Any) -> dict[str, Any] | None:
     if not isinstance(record, dict):
         return None

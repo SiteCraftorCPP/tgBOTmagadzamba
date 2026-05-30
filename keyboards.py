@@ -24,7 +24,17 @@ def admin_category_menu(cat_id: str) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="➕ Добавить товар", callback_data=f"admin:add_prod:cat:{cat_id}")],
             [InlineKeyboardButton(text="📋 Товары раздела", callback_data=f"admin:list_cat:{cat_id}")],
+            [InlineKeyboardButton(text="🗑 Удалить раздел", callback_data=f"admin:del_cat:{cat_id}")],
             [InlineKeyboardButton(text="⬅️ Назад", callback_data="admin:cats:0")],
+        ]
+    )
+
+
+def confirm_delete_category_keyboard(cat_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"admin:del_cat_confirm:{cat_id}")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"admin:cat:{cat_id}")],
         ]
     )
 
