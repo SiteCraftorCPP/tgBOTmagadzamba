@@ -14,7 +14,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, InputMediaPhoto, Message
 
 from config import Config, load_config
-from keyboards import admin_categories_keyboard, admin_category_menu, admin_menu, cancel_keyboard, categories_keyboard, main_menu, payment_stub, product_card, product_pagination
+from keyboards import admin_categories_keyboard, admin_category_menu, admin_menu, cancel_keyboard, categories_keyboard, main_menu, payment_stub, product_card, product_pagination, done_photos_keyboard
 from storage import add_category, add_product, ensure_storage, get_category, get_product, list_categories, list_products, save_order
 
 
@@ -30,10 +30,9 @@ class AddCategory(StatesGroup):
 
 class AddProduct(StatesGroup):
     category_id = State()
-    photo = State()
+    photos = State()
     name = State()
     price = State()
-    description = State()
 
 
 class OrderProduct(StatesGroup):
@@ -52,15 +51,8 @@ def product_link(product_id: str) -> str:
 
 def product_caption(product: dict[str, Any], include_link: bool = False) -> str:
     name = str(product["name"])
-    raw_desc = str(product["description"])
-    max_desc = 520 if include_link else 900
-    if len(raw_desc) > max_desc:
-        desc = raw_desc[: max_desc - 1] + "…"
-    else:
-        desc = raw_desc
     text = (
         f"💄 <b>{escape(name)}</b>\n\n"
-        f"{escape(desc)}\n\n"
         f"💰 Цена: <b>{escape(str(product['price']))}</b>"
     )
     if include_link:
@@ -103,17 +95,30 @@ def admin_list_chunks(products: list[dict[str, Any]]) -> list[str]:
 
 
 async def show_product(message: Message, product: dict[str, Any]) -> None:
-    try:
-        await message.answer_photo(
-            photo=product["photo"],
-            caption=product_caption(product),
-            reply_markup=product_card(product["id"]),
-        )
-    except TelegramBadRequest:
+    photos = product.get("photos", [])
+    if not photos and "photo" in product:
+        photos = [product["photo"]]
+        
+    if len(photos) > 1:
+        media = [InputMediaPhoto(media=p) for p in photos]
+        await message.answer_media_group(media)
         await message.answer(
             product_caption(product),
             reply_markup=product_card(product["id"]),
         )
+    else:
+        photo = photos[0] if photos else "https://via.placeholder.com/150"
+        try:
+            await message.answer_photo(
+                photo=photo,
+                caption=product_caption(product),
+                reply_markup=product_card(product["id"]),
+            )
+        except TelegramBadRequest:
+            await message.answer(
+                product_caption(product),
+                reply_markup=product_card(product["id"]),
+            )
 
 
 async def show_main_menu(message: Message, user_id: int | None) -> None:
@@ -271,9 +276,9 @@ async def admin_add_prod_cat(callback: CallbackQuery, state: FSMContext) -> None
     if not is_admin(callback.from_user.id):
         return
     cat_id = callback.data.split(":")[-1]
-    await state.update_data(category_id=cat_id)
-    await state.set_state(AddProduct.photo)
-    await callback.message.answer("📸 Отправьте фото товара.", reply_markup=cancel_keyboard(f"admin:cat:{cat_id}"))
+    await state.update_data(category_id=cat_id, photos=[])
+    await state.set_state(AddProduct.photos)
+    await callback.message.answer("📸 Отправьте от 1 до 10 фото товара.\nКогда загрузите все, нажмите «Готово».", reply_markup=done_photos_keyboard(cat_id))
     try:
         await callback.message.delete()
     except TelegramBadRequest:
@@ -303,43 +308,57 @@ async def admin_list_cat_callback(callback: CallbackQuery) -> None:
 
 
 
-@router.message(AddProduct.photo, F.photo)
+@router.message(AddProduct.photos, F.photo)
 async def add_product_photo(message: Message, state: FSMContext) -> None:
     if not is_admin(message.from_user.id if message.from_user else None):
         await state.clear()
         return
 
-    await state.update_data(photo=message.photo[-1].file_id)
-    await state.set_state(AddProduct.name)
-    await message.answer(
-        "💄 Введите название товара.",
-        reply_markup=cancel_keyboard("add:back:photo"),
-    )
+    data = await state.get_data()
+    photos = data.get("photos", [])
+    if len(photos) >= 10:
+        return
+
+    photos.append(message.photo[-1].file_id)
+    await state.update_data(photos=photos)
 
 
-@router.message(AddProduct.photo)
+@router.message(AddProduct.photos)
 async def add_product_photo_invalid(message: Message) -> None:
     await message.answer(
         "📸 Нужно отправить именно фото товара.",
-        reply_markup=cancel_keyboard("admin:menu"),
     )
+
+
+@router.callback_query(F.data == "add:photos_done")
+async def add_photos_done(callback: CallbackQuery, state: FSMContext) -> None:
+    if not is_admin(callback.from_user.id):
+        return
+    data = await state.get_data()
+    photos = data.get("photos", [])
+    if not photos:
+        await callback.answer("Отправьте хотя бы 1 фото!", show_alert=True)
+        return
+    
+    await state.set_state(AddProduct.name)
+    await callback.message.answer(
+        "💄 Введите название товара.",
+        reply_markup=cancel_keyboard("add:back:photos"),
+    )
+    try:
+        await callback.message.delete()
+    except TelegramBadRequest:
+        pass
 
 
 @router.message(AddProduct.name, ~F.text)
 async def add_product_name_need_text(message: Message) -> None:
-    await message.answer("💄 Отправьте название текстом.", reply_markup=cancel_keyboard("add:back:photo"))
+    await message.answer("💄 Отправьте название текстом.", reply_markup=cancel_keyboard("add:back:photos"))
 
 
 @router.message(AddProduct.price, ~F.text)
 async def add_product_price_need_text(message: Message) -> None:
     await message.answer("💰 Отправьте цену текстом.", reply_markup=cancel_keyboard("add:back:name"))
-
-
-@router.message(AddProduct.description, ~F.text)
-async def add_product_description_need_text(message: Message) -> None:
-    await message.answer(
-        "📝 Отправьте описание текстом.", reply_markup=cancel_keyboard("add:back:price")
-    )
 
 
 @router.message(AddProduct.name, F.text)
@@ -354,42 +373,44 @@ async def add_product_name(message: Message, state: FSMContext) -> None:
 
 @router.message(AddProduct.price, F.text)
 async def add_product_price(message: Message, state: FSMContext) -> None:
-    await state.update_data(price=message.text.strip())
-    await state.set_state(AddProduct.description)
-    await message.answer(
-        "📝 Введите описание товара.",
-        reply_markup=cancel_keyboard("add:back:price"),
-    )
-
-
-@router.message(AddProduct.description, F.text)
-async def add_product_description(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
-    if not {"category_id", "name", "price", "photo"}.issubset(data.keys()):
+    price = message.text.strip()
+    
+    if not {"category_id", "name", "photos"}.issubset(data.keys()):
         await state.clear()
         await message.answer("⚠️ Сессия сбросилась. Начните снова с /addproduct.")
         return
+        
     cat_id = data["category_id"]
     product = add_product(
         category_id=cat_id,
         name=data["name"],
-        price=data["price"],
-        description=message.text.strip(),
-        photo=data["photo"],
+        price=price,
+        photos=data["photos"],
     )
     await state.clear()
     await message.answer("✅ Товар сохранен!")
-    try:
-        await message.answer_photo(
-            photo=product["photo"],
-            caption=product_caption(product, include_link=False),
-            reply_markup=admin_category_menu(cat_id),
-        )
-    except TelegramBadRequest:
+    
+    photos = product.get("photos", [])
+    if len(photos) > 1:
+        media = [InputMediaPhoto(media=p) for p in photos]
+        await message.answer_media_group(media)
         await message.answer(
             product_caption(product, include_link=False),
             reply_markup=admin_category_menu(cat_id),
         )
+    else:
+        try:
+            await message.answer_photo(
+                photo=photos[0],
+                caption=product_caption(product, include_link=False),
+                reply_markup=admin_category_menu(cat_id),
+            )
+        except TelegramBadRequest:
+            await message.answer(
+                product_caption(product, include_link=False),
+                reply_markup=admin_category_menu(cat_id),
+            )
 
 
 @router.callback_query(F.data.startswith("add:back:"))
@@ -403,23 +424,19 @@ async def add_product_back(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.message:
         return
 
-    if step == "photo":
-        await state.set_state(AddProduct.photo)
+    data = await state.get_data()
+    if step == "photos":
+        await state.set_state(AddProduct.photos)
+        await state.update_data(photos=[])
         await callback.message.answer(
-            "📸 Отправьте фото товара заново.",
-            reply_markup=cancel_keyboard(f"admin:cat:{data.get('category_id', '')}"),
+            "📸 Отправьте от 1 до 10 фото товара.\nКогда загрузите все, нажмите «Готово».",
+            reply_markup=done_photos_keyboard(data.get("category_id", "")),
         )
     elif step == "name":
         await state.set_state(AddProduct.name)
         await callback.message.answer(
             "💄 Введите название товара заново.",
-            reply_markup=cancel_keyboard("add:back:photo"),
-        )
-    elif step == "price":
-        await state.set_state(AddProduct.price)
-        await callback.message.answer(
-            "💰 Введите цену товара заново.",
-            reply_markup=cancel_keyboard("add:back:name"),
+            reply_markup=cancel_keyboard("add:back:photos"),
         )
 
 
@@ -458,23 +475,47 @@ async def catalog_cat_callback(callback: CallbackQuery, state: FSMContext) -> No
         
     page = page % len(products)
     product = products[page]
-    markup = product_pagination(cat_id, page, len(products), product["id"])
+    
+    photos = product.get("photos", [])
+    if not photos and "photo" in product:
+        photos = [product["photo"]]
+    photo = photos[0] if photos else "https://via.placeholder.com/150"
+    
+    markup = product_pagination(cat_id, page, len(products), product["id"], len(photos))
     
     try:
         if callback.message and callback.message.photo:
             await callback.message.edit_media(
-                media=InputMediaPhoto(media=product["photo"], caption=product_caption(product)),
+                media=InputMediaPhoto(media=photo, caption=product_caption(product)),
                 reply_markup=markup
             )
         elif callback.message:
             await callback.message.answer_photo(
-                photo=product["photo"],
+                photo=photo,
                 caption=product_caption(product),
                 reply_markup=markup
             )
             await callback.message.delete()
     except TelegramBadRequest:
         pass
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("product:photos:"))
+async def product_photos_callback(callback: CallbackQuery) -> None:
+    product_id = callback.data.split(":")[-1]
+    product = get_product(product_id)
+    if not product:
+        await callback.answer("Товар не найден", show_alert=True)
+        return
+        
+    photos = product.get("photos", [])
+    if not photos and "photo" in product:
+        photos = [product["photo"]]
+        
+    if len(photos) > 1:
+        media = [InputMediaPhoto(media=p) for p in photos]
+        await callback.message.answer_media_group(media)
     await callback.answer()
 
 

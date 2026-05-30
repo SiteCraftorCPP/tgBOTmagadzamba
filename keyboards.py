@@ -64,7 +64,12 @@ def categories_keyboard(categories: list[dict], prefix: str, back_data: str = "m
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def product_pagination(category_id: str, current_idx: int, total: int, product_id: str) -> InlineKeyboardMarkup:
+def product_pagination(category_id: str, current_idx: int, total: int, product_id: str, photo_count: int = 1) -> InlineKeyboardMarkup:
+    buttons = []
+    
+    if photo_count > 1:
+        buttons.append([InlineKeyboardButton(text=f"📸 Все фото ({photo_count})", callback_data=f"product:photos:{product_id}")])
+        
     nav_row = []
     if total > 1:
         prev_idx = (current_idx - 1) % total
@@ -75,13 +80,20 @@ def product_pagination(category_id: str, current_idx: int, total: int, product_i
             InlineKeyboardButton(text="➡️", callback_data=f"catalog:cat:{category_id}:{next_idx}"),
         ]
     
-    buttons = []
     if nav_row:
         buttons.append(nav_row)
     buttons.append([InlineKeyboardButton(text="🛒 Оформить заказ", callback_data=f"order:start:{product_id}")])
     buttons.append([InlineKeyboardButton(text="🔙 К разделам", callback_data="catalog")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
+def done_photos_keyboard(cat_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Готово", callback_data="add:photos_done")],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data=f"admin:cat:{cat_id}")],
+        ]
+    )
 
 def cancel_keyboard(back_callback: str | None = None) -> InlineKeyboardMarkup:
     buttons = []

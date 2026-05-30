@@ -11,7 +11,7 @@ PRODUCTS_FILE = DATA_DIR / "products.json"
 ORDERS_FILE = DATA_DIR / "orders.json"
 
 _CATEGORY_KEYS_STRICT = frozenset({"id", "name"})
-_PRODUCT_KEYS_STRICT = frozenset({"id", "category_id", "name", "price", "description", "photo"})
+_PRODUCT_KEYS_STRICT = frozenset({"id", "category_id", "name", "price"})
 
 
 def _sanitize_category(record: Any) -> dict[str, Any] | None:
@@ -47,16 +47,20 @@ def _sanitize_product(record: Any) -> dict[str, Any] | None:
     if not _PRODUCT_KEYS_STRICT.issubset(record.keys()):
         return None
     pid = str(record.get("id", "")).strip()
-    photo = str(record.get("photo", "")).strip()
-    if not pid or not photo:
+    
+    # Migration for old products
+    photos = record.get("photos", [])
+    if not photos and "photo" in record:
+        photos = [str(record["photo"]).strip()]
+        
+    if not pid or not photos:
         return None
     return {
         "id": pid,
         "category_id": str(record.get("category_id", "")).strip(),
         "name": record["name"],
         "price": record["price"],
-        "description": record["description"],
-        "photo": photo,
+        "photos": photos,
     }
 
 
@@ -104,7 +108,7 @@ def get_product(product_id: str) -> dict[str, Any] | None:
     return None
 
 
-def add_product(category_id: str, name: str, price: str, description: str, photo: str) -> dict[str, Any]:
+def add_product(category_id: str, name: str, price: str, photos: list[str]) -> dict[str, Any]:
     products = list_products()
     product_id = _generate_product_id(products)
     product = {
@@ -112,8 +116,7 @@ def add_product(category_id: str, name: str, price: str, description: str, photo
         "category_id": category_id,
         "name": name,
         "price": price,
-        "description": description,
-        "photo": photo,
+        "photos": photos,
     }
     products.append(product)
     _write_json(PRODUCTS_FILE, products)
