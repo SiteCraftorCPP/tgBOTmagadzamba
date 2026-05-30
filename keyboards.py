@@ -74,18 +74,28 @@ def categories_keyboard(categories: list[dict], prefix: str, back_data: str = "m
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def product_pagination(category_id: str, current_idx: int, total: int, product_id: str) -> InlineKeyboardMarkup:
+def product_pagination(category_id: str, current_idx: int, total: int, product_id: str, photo_idx: int = 0, photo_total: int = 1) -> InlineKeyboardMarkup:
+    buttons = []
+    
+    if photo_total > 1:
+        photo_prev = (photo_idx - 1) % photo_total
+        photo_next = (photo_idx + 1) % photo_total
+        buttons.append([
+            InlineKeyboardButton(text="🖼 ⬅️", callback_data=f"prod_photo:{product_id}:{photo_prev}:{category_id}:{current_idx}"),
+            InlineKeyboardButton(text=f"Фото {photo_idx + 1} / {photo_total}", callback_data="noop"),
+            InlineKeyboardButton(text="➡️ 🖼", callback_data=f"prod_photo:{product_id}:{photo_next}:{category_id}:{current_idx}")
+        ])
+        
     nav_row = []
     if total > 1:
         prev_idx = (current_idx - 1) % total
         next_idx = (current_idx + 1) % total
         nav_row = [
-            InlineKeyboardButton(text="⬅️", callback_data=f"catalog:cat:{category_id}:{prev_idx}"),
+            InlineKeyboardButton(text="⬅️ Товар", callback_data=f"catalog:cat:{category_id}:{prev_idx}"),
             InlineKeyboardButton(text=f"{current_idx + 1} / {total}", callback_data="noop"),
-            InlineKeyboardButton(text="➡️", callback_data=f"catalog:cat:{category_id}:{next_idx}"),
+            InlineKeyboardButton(text="Товар ➡️", callback_data=f"catalog:cat:{category_id}:{next_idx}"),
         ]
     
-    buttons = []
     if nav_row:
         buttons.append(nav_row)
     buttons.append([InlineKeyboardButton(text="🛒 Оформить заказ", callback_data=f"order:start:{product_id}")])
@@ -109,13 +119,19 @@ def cancel_keyboard(back_callback: str | None = None) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def product_card(product_id: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🛒 Оформить заказ", callback_data=f"order:start:{product_id}")],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="menu:main")],
-        ]
-    )
+def product_card(product_id: str, photo_idx: int = 0, photo_total: int = 1) -> InlineKeyboardMarkup:
+    buttons = []
+    if photo_total > 1:
+        photo_prev = (photo_idx - 1) % photo_total
+        photo_next = (photo_idx + 1) % photo_total
+        buttons.append([
+            InlineKeyboardButton(text="🖼 ⬅️", callback_data=f"prod_photo_card:{product_id}:{photo_prev}"),
+            InlineKeyboardButton(text=f"Фото {photo_idx + 1} / {photo_total}", callback_data="noop"),
+            InlineKeyboardButton(text="➡️ 🖼", callback_data=f"prod_photo_card:{product_id}:{photo_next}")
+        ])
+    buttons.append([InlineKeyboardButton(text="🛒 Оформить заказ", callback_data=f"order:start:{product_id}")])
+    buttons.append([InlineKeyboardButton(text="⬅️ В главное меню", callback_data="menu:main")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 
